@@ -98,7 +98,7 @@ struct DetailTranscriptPane: View {
 
     private var lines: some View {
         LazyVStack(spacing: 0) {
-            ForEach(Array(SampleData.transcript.enumerated()), id: \.element.id) { pair in
+            ForEach(Array(app.transcriptLines.enumerated()), id: \.element.id) { pair in
                 let i = pair.offset
                 let line = pair.element
                 row(line, i)
@@ -162,7 +162,7 @@ struct DetailTranscriptPane: View {
                         Capsule().fill(theme.border)
                         Capsule()
                             .fill(theme.accent)
-                            .frame(width: geo.size.width * CGFloat(min(1.0, Double(app.playPos) / Double(SampleData.detailDurationSeconds))))
+                            .frame(width: geo.size.width * CGFloat(min(1.0, Double(app.playPos) / Double(app.detailDurationSeconds))))
                     }
                 }
                 .frame(height: 4)

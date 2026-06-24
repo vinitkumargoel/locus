@@ -174,7 +174,7 @@ struct LiveTranscriptView: View {
                 .hairline(theme.border2, cornerRadius: 20)
                 .padding(.bottom, 18)
 
-                ForEach(SampleData.liveLines) { ln in
+                ForEach(app.liveLines) { ln in
                     HStack(alignment: .top, spacing: 14) {
                         VStack(alignment: .trailing, spacing: 1) {
                             Text(ln.speaker)

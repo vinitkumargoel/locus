@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct LocusApp: App {
-    @StateObject private var app = AppState()
+    @StateObject private var app = AppState(services: .live())
 
     var body: some Scene {
         // Main window — sidebar + screen router. Borderless, full-bleed; the

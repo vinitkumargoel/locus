@@ -5,6 +5,7 @@ import SwiftUI
 struct StorageSettingsView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.theme) private var theme
+    @State private var confirmDeleteAll = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -13,6 +14,12 @@ struct StorageSettingsView: View {
             deleteAllRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .confirmationDialog("Delete all recordings?", isPresented: $confirmDeleteAll, titleVisibility: .visible) {
+            Button("Delete all recordings", role: .destructive) { app.deleteAllRecordings() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes every recording, transcript, and summary. This can't be undone.")
+        }
     }
 
     // MARK: Retention
@@ -60,13 +67,13 @@ struct StorageSettingsView: View {
                 Text("Storage location")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(theme.text)
-                Text(SampleData.storagePath)
+                Text(app.storagePath)
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(theme.text3)
                     .padding(.top, 3)
             }
             Spacer()
-            Button {} label: {
+            Button { app.revealStorage() } label: {
                 Text("Reveal")
                     .font(.system(size: 12.5))
                     .foregroundStyle(theme.text)
@@ -92,13 +99,13 @@ struct StorageSettingsView: View {
                 Text("Delete all recordings")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(theme.rec)
-                Text(SampleData.libraryFooter)
+                Text(app.libraryFooter)
                     .font(.system(size: 11.5))
                     .foregroundStyle(theme.text2)
                     .padding(.top, 3)
             }
             Spacer()
-            Button {} label: {
+            Button { confirmDeleteAll = true } label: {
                 Text("Delete all…")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(.white)

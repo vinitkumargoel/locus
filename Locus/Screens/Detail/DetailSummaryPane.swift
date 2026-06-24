@@ -25,7 +25,7 @@ struct DetailSummaryPane: View {
 
             HStack(spacing: 8) {
                 Picker("", selection: $app.activeTemplateID) {
-                    ForEach(SampleData.templates) { t in
+                    ForEach(app.templatesList) { t in
                         Text(t.name).tag(t.id)
                     }
                 }
@@ -178,9 +178,12 @@ struct DetailSummaryPane: View {
     }
 
     private var ready: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let latest = app.detailSummaries.first
+        let meta = latest.map { "\($0.templateName) · \($0.model)" } ?? "Summary"
+        let isStale = latest?.isStale ?? false
+        return VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(SampleData.summaryMeta)
+                Text(meta)
                     .font(.system(size: 11))
                     .foregroundStyle(theme.text2)
                 Spacer()
@@ -190,28 +193,32 @@ struct DetailSummaryPane: View {
                     .contentShape(Rectangle())
                     .onTapGesture { app.generate() }
             }
-            .padding(.bottom, 14)
+            .padding(.bottom, isStale ? 8 : 14)
 
-            ForEach(SampleData.summarySections) { sec in
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(sec.heading)
-                        .font(.system(size: 12.5, weight: .bold))
-                        .foregroundStyle(theme.text)
-                    ForEach(sec.items) { it in
-                        HStack(alignment: .top, spacing: 6) {
-                            Text(it.bullet)
-                                .font(.system(size: 13))
-                                .foregroundStyle(theme.text3)
-                            Text(it.text)
-                                .font(.system(size: 13))
-                                .lineSpacing(2)
-                                .foregroundStyle(theme.text)
-                        }
-                    }
-                }
-                .padding(.bottom, 18)
+            if isStale {
+                Text("Transcript changed since this was generated — regenerate to refresh.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(theme.warnFg)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(theme.warn))
+                    .padding(.bottom, 14)
             }
+
+            // Real generated summary (Markdown text from the LLM).
+            Text(markdown(app.streamText))
+                .font(.system(size: 13))
+                .lineSpacing(3)
+                .foregroundStyle(theme.text)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Render the summary as lightweight Markdown, falling back to plain text.
+    private func markdown(_ s: String) -> AttributedString {
+        (try? AttributedString(markdown: s, options: .init(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
     }
 }
 

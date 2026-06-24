@@ -14,7 +14,7 @@ struct TranscriptionSettingsView: View {
                 .foregroundStyle(theme.text2)
                 .padding(.bottom, 16)
 
-            ForEach(SampleData.sttModels) { m in
+            ForEach(app.sttModels) { m in
                 modelCard(m)
                     .padding(.bottom, 10)
             }
@@ -86,7 +86,7 @@ struct TranscriptionSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {} label: {
+            Button { if m.status != .active { app.selectSTTModel(m.name) } } label: {
                 Text(btnLabel)
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(btnColor)

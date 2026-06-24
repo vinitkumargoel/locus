@@ -8,7 +8,7 @@ struct PermissionsSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(SampleData.permissions) { p in
+            ForEach(app.permissionItems) { p in
                 row(p)
                     .padding(.bottom, 10)
             }
@@ -42,7 +42,7 @@ struct PermissionsSettingsView: View {
                 .foregroundStyle(p.granted ? theme.ok : theme.rec)
 
             if !p.granted {
-                Button {} label: {
+                Button { app.fixPermission(p.name) } label: {
                     Text("Open System Settings")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white)

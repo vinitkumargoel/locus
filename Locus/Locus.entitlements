@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Locus is intentionally NOT sandboxed: the App Sandbox blocks the
+	  CoreAudio process-tap path used to capture meeting audio. Distribution
+	  is Developer ID + notarization, not the App Store.
+
+	  Hardened Runtime is enabled (see ENABLE_HARDENED_RUNTIME), so microphone
+	  capture requires the audio-input resource entitlement below.
+	-->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

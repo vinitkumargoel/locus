@@ -14,6 +14,8 @@ struct LibraryView: View {
 
             if app.noMatches {
                 noMatches
+            } else if app.meetings.isEmpty {
+                emptyState
             } else {
                 list
             }
@@ -134,11 +136,28 @@ struct LibraryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    // MARK: Empty state (no recordings yet)
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Text("◎").font(.system(size: 30)).foregroundStyle(theme.text2).opacity(0.4)
+            Text("No recordings yet")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(theme.text)
+            Text("Start a meeting in Zoom or a Slack huddle — or hit Record now — and Locus will capture and transcribe it here.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(theme.text2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: Footer
 
     private var footer: some View {
         HStack {
-            Text(SampleData.libraryFooter)
+            Text(app.libraryFooter)
                 .font(.system(size: 11.5))
                 .foregroundStyle(theme.text3)
             Spacer()

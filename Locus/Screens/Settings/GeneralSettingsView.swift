@@ -47,9 +47,9 @@ struct GeneralSettingsView: View {
 
     private var detectedAppsBox: some View {
         VStack(spacing: 0) {
-            ForEach(Array(SampleData.detectionApps.enumerated()), id: \.element.id) { pair in
+            ForEach(Array(app.detectionApps.enumerated()), id: \.element.id) { pair in
                 row(pair.element)
-                if pair.offset < SampleData.detectionApps.count - 1 {
+                if pair.offset < app.detectionApps.count - 1 {
                     Divider().overlay(theme.border2)
                 }
             }

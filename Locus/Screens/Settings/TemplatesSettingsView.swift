@@ -8,6 +8,7 @@ struct TemplatesSettingsView: View {
 
     @State private var name = ""
     @State private var bodyText = ""
+    @State private var saveError: String?
     // Suppresses the dirty flag while we programmatically reseed the editor.
     @State private var reseeding = false
 
@@ -19,12 +20,15 @@ struct TemplatesSettingsView: View {
         .frame(height: 420)
         .onAppear { reseed() }
         .onChange(of: app.editTemplateID) { reseed() }
+        .onChange(of: app.templatesList.count) { reseed() }
     }
 
     private func reseed() {
         reseeding = true
-        name = SampleData.templates.first { $0.id == app.editTemplateID }?.name ?? ""
-        bodyText = SampleData.templateBody(app.editTemplateID)
+        let t = app.templatesList.first { $0.id == app.editTemplateID }
+        name = t?.name ?? ""
+        bodyText = t?.prompt ?? ""
+        saveError = nil
         reseeding = false
     }
 
@@ -34,12 +38,12 @@ struct TemplatesSettingsView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(SampleData.templates) { t in
+                    ForEach(app.templatesList) { t in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(t.name)
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(t.id == app.editTemplateID ? theme.accent : theme.text)
-                            Text(t.badge)
+                            Text(t.isBuiltin ? "Built-in preset" : "Custom")
                                 .font(.system(size: 11))
                                 .foregroundStyle(theme.text3)
                         }
@@ -64,7 +68,7 @@ struct TemplatesSettingsView: View {
                     Divider().overlay(theme.border2)
                 }
                 .contentShape(Rectangle())
-                .onTapGesture { app.newTemplate() }
+                .onTapGesture { app.createTemplate() }
         }
         .frame(width: 210)
         .background(RoundedRectangle(cornerRadius: 10).fill(theme.card))
@@ -88,7 +92,7 @@ struct TemplatesSettingsView: View {
                     .frame(maxWidth: .infinity)
                     .onChange(of: name) { if !reseeding { app.markTemplateDirty() } }
 
-                Button { app.markTemplateDirty() } label: {
+                Button { app.duplicateTemplate(name: name, body: bodyText) } label: {
                     Text("Duplicate")
                         .font(.system(size: 12.5))
                         .foregroundStyle(theme.text)
@@ -105,7 +109,7 @@ struct TemplatesSettingsView: View {
                 Text("Insert:")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.text2)
-                ForEach(SampleData.templateVariables, id: \.self) { v in
+                ForEach(TemplateEngine.variables, id: \.self) { v in
                     Text(v)
                         .font(.system(size: 11.5, design: .monospaced))
                         .foregroundStyle(theme.accent)
@@ -113,7 +117,7 @@ struct TemplatesSettingsView: View {
                         .padding(.vertical, 3)
                         .background(RoundedRectangle(cornerRadius: 6).fill(theme.accentSoft))
                         .contentShape(Rectangle())
-                        .onTapGesture { app.markTemplateDirty() }
+                        .onTapGesture { bodyText += v }
                 }
             }
             .padding(.bottom, 8)
@@ -129,13 +133,17 @@ struct TemplatesSettingsView: View {
                 .onChange(of: bodyText) { if !reseeding { app.markTemplateDirty() } }
 
             HStack(spacing: 8) {
-                if app.teUnsaved {
+                if let saveError {
+                    Text("⚠ \(saveError)")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(theme.rec)
+                } else if app.teUnsaved {
                     Text("● Unsaved changes")
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(theme.warn)
                 }
                 Spacer()
-                Button { app.discardTemplate() } label: {
+                Button { app.discardTemplate(); reseed() } label: {
                     Text("Discard")
                         .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(theme.text)
@@ -145,7 +153,7 @@ struct TemplatesSettingsView: View {
                         .hairline(theme.border, cornerRadius: 7)
                 }
                 .buttonStyle(.plain)
-                Button { app.saveTemplate() } label: {
+                Button { saveError = app.saveEditedTemplate(name: name, body: bodyText) } label: {
                     Text("Save")
                         .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(.white)

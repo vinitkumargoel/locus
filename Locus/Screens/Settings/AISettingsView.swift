@@ -6,7 +6,11 @@ struct AISettingsView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.theme) private var theme
 
-    @State private var selectedModel = SampleData.aiModels[0]
+    private var modelChoices: [String] {
+        var list = app.aiModelsAvailable
+        if !app.aiModel.isEmpty && !list.contains(app.aiModel) { list.insert(app.aiModel, at: 0) }
+        return list.isEmpty ? [app.aiModel] : list
+    }
 
     var body: some View {
         let s = app.aiStatusStyle(theme)
@@ -30,7 +34,7 @@ struct AISettingsView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(theme.text2)
                 .padding(.bottom, 6)
-            TextField("http://localhost:11434/v1", text: .constant(SampleData.aiBaseURL))
+            TextField("http://localhost:11434/v1", text: $app.aiBaseURLField)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .foregroundStyle(theme.text)
@@ -47,15 +51,21 @@ struct AISettingsView: View {
                 .foregroundStyle(theme.text2)
                 .padding(.bottom, 6)
             HStack(spacing: 8) {
-                TextField("sk-…", text: .constant(app.aiMasked ? SampleData.aiKeyMasked : SampleData.aiKeyPlain))
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.text)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(theme.card))
-                    .hairline(theme.border, cornerRadius: 8)
-                    .frame(maxWidth: .infinity)
+                Group {
+                    if app.aiMasked {
+                        SecureField("sk-…", text: $app.aiKeyField)
+                    } else {
+                        TextField("sk-…", text: $app.aiKeyField)
+                    }
+                }
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundStyle(theme.text)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 9)
+                .background(RoundedRectangle(cornerRadius: 8).fill(theme.card))
+                .hairline(theme.border, cornerRadius: 8)
+                .frame(maxWidth: .infinity)
                 Button { app.toggleMask() } label: {
                     Text(app.aiMasked ? "Show" : "Hide")
                         .font(.system(size: 12.5))
@@ -75,14 +85,14 @@ struct AISettingsView: View {
                 .foregroundStyle(theme.text2)
                 .padding(.bottom, 6)
             HStack(spacing: 8) {
-                Picker("", selection: $selectedModel) {
-                    ForEach(SampleData.aiModels, id: \.self) { Text($0).tag($0) }
+                Picker("", selection: $app.aiModel) {
+                    ForEach(modelChoices, id: \.self) { Text($0).tag($0) }
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .font(.system(size: 13))
                 .frame(maxWidth: .infinity)
-                Button {} label: {
+                Button { app.loadAIModels() } label: {
                     Text("Load models")
                         .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(theme.text)
