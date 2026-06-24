@@ -217,7 +217,17 @@ final class CoreAudioCaptureService: CaptureService {
         }
 
         micConverter = AVAudioConverter(from: inputFormat, to: targetFormat)
-        micFile = try? makeAudioFile(at: micPath)
+        // The mic file is the recording's floor: if we can't persist it, fail the
+        // whole start rather than silently capturing to nothing (the audio would
+        // be published to live STT but never saved, so the recording would
+        // vanish at finalize with no error).
+        do {
+            micFile = try makeAudioFile(at: micPath)
+        } catch {
+            log.error("Could not create mic audio file: \(error.localizedDescription, privacy: .public)")
+            throw CaptureError.cannotWriteAudio
+        }
+        guard micFile != nil else { throw CaptureError.cannotWriteAudio }
 
         input.installTap(onBus: 0, bufferSize: 4_096, format: inputFormat) { [weak self] buffer, _ in
             self?.handleBuffer(buffer, tag: .you)
@@ -289,6 +299,9 @@ final class CoreAudioCaptureService: CaptureService {
         tapFormat = format
         farConverter = AVAudioConverter(from: format, to: targetFormat)
         farFile = try? makeAudioFile(at: farPath)
+        if farFile == nil {
+            log.error("Could not create far-end audio file; far-end audio will not be saved")
+        }
 
         // 4. Create a private aggregate device that hosts the tap.
         guard let aggID = createAggregateDevice(tapUUID: description.uuid),
@@ -318,6 +331,10 @@ final class CoreAudioCaptureService: CaptureService {
         let startStatus = AudioDeviceStart(aggID, proc)
         guard startStatus == noErr else {
             log.error("AudioDeviceStart failed (\(startStatus, privacy: .public)); far-end disabled")
+            // Destroy the IOProc we successfully created above before tearing the
+            // aggregate down, otherwise the proc handle leaks inside CoreAudio.
+            AudioDeviceDestroyIOProcID(aggID, proc)
+            tapIOProcID = nil
             destroyAggregate()
             destroyTap()
             return
@@ -649,13 +666,52 @@ final class CoreAudioCaptureService: CaptureService {
     // MARK: - File + math helpers
 
     /// `~/Library/Application Support/Locus/audio`, created if needed.
+    ///
+    /// Privacy hardening (P1): the directory is created/locked to `0700` and
+    /// excluded from backups, consistent with the app's offline posture. On
+    /// macOS NSFileProtection is iOS-centric, so restrictive POSIX perms plus a
+    /// backup-exclusion flag are the portable equivalent. Hardening is
+    /// best-effort — a perms/flag failure must never block capture.
     private static func audioDirectory() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let dir = base.appendingPathComponent("Locus/audio", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        Self.harden(directory: dir)
         return dir
     }
+
+    /// Best-effort directory hardening: `0700` perms + exclude-from-backup.
+    /// Applied unconditionally (not only at creation) so an existing directory
+    /// is also locked down. Never throws.
+    private static func harden(directory url: URL) {
+        let fm = FileManager.default
+        do {
+            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+        } catch {
+            fileLog.error("Could not set 0700 on \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+        var dir = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        do {
+            try dir.setResourceValues(values)
+        } catch {
+            fileLog.error("Could not exclude \(url.lastPathComponent, privacy: .public) from backup: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Best-effort `0600` on a freshly-created audio file. Never throws.
+    private static func harden(file url: URL) {
+        do {
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        } catch {
+            fileLog.error("Could not set 0600 on \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Logger for the `static` file helpers (which have no instance `log`).
+    private static let fileLog = Logger(subsystem: "com.locus.app", category: "Capture")
 
     /// Open a compressed AAC `.m4a` for incremental writing at the 16 kHz mono
     /// target rate. Writing buffers as they arrive (R7) means a crash leaves a
@@ -669,8 +725,12 @@ final class CoreAudioCaptureService: CaptureService {
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
         ]
-        return try AVAudioFile(forWriting: url, settings: settings,
-                               commonFormat: .pcmFormatFloat32, interleaved: false)
+        let file = try AVAudioFile(forWriting: url, settings: settings,
+                                   commonFormat: .pcmFormatFloat32, interleaved: false)
+        // The .m4a is created by AVAudioFile above; lock it to 0600 afterward.
+        // Best-effort — a perms failure must not break capture.
+        Self.harden(file: url)
+        return file
     }
 
     /// Root-mean-square level of a mono Float32 buffer, in 0...1.
@@ -691,9 +751,11 @@ final class CoreAudioCaptureService: CaptureService {
 
     private enum CaptureError: LocalizedError {
         case noInputDevice
+        case cannotWriteAudio
         var errorDescription: String? {
             switch self {
-            case .noInputDevice: return "No microphone input device is available."
+            case .noInputDevice:   return "No microphone input device is available."
+            case .cannotWriteAudio: return "Couldn't create the recording file — the disk may be full or unwritable."
             }
         }
     }

@@ -355,11 +355,26 @@ final class OpenAICompatibleLLM: SummarizationService {
         }
         let base = trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
         guard let url = URL(string: base + "/" + path),
-              let scheme = url.scheme, scheme == "http" || scheme == "https",
-              url.host != nil else {
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty else {
             throw LLMError(kind: .badURL, message: "The server URL is not valid: \(baseURL)")
         }
+        // Cleartext HTTP would put the API key (sent as a Bearer header) on the
+        // wire in plaintext. Allow it only for loopback hosts (local LLM servers
+        // like Ollama / LM Studio); require HTTPS for anything off-device.
+        if scheme == "http" && !Self.isLoopback(host) {
+            throw LLMError(kind: .badURL,
+                           message: "Use HTTPS for non-local endpoints — plain HTTP would expose your API key.")
+        }
         return url
+    }
+
+    /// Loopback hosts for which cleartext HTTP is acceptable (the request never
+    /// leaves the machine).
+    private static func isLoopback(_ host: String) -> Bool {
+        let h = host.lowercased()
+        return h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "[::1]"
+            || h.hasSuffix(".localhost")
     }
 
     private func applyAuth(_ request: inout URLRequest, apiKey: String?) {
@@ -426,10 +441,23 @@ final class OpenAICompatibleLLM: SummarizationService {
     private func serverMessage(_ body: Data) -> String? {
         guard !body.isEmpty else { return nil }
         if let env = try? JSONDecoder().decode(ErrorEnvelope.self, from: body) {
-            return env.error?.message ?? env.errorString
+            return Self.sanitize(env.error?.message ?? env.errorString)
         }
         let text = String(data: body, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (text?.isEmpty ?? true) ? nil : text
+        return Self.sanitize(text)
+    }
+
+    /// The server is user-configured but untrusted: its error body could contain
+    /// control characters, escape sequences, or echoed request headers. Strip
+    /// non-printables and cap the length before this text reaches the UI / logs.
+    private static func sanitize(_ message: String?) -> String? {
+        guard let message else { return nil }
+        let cleaned = String(message.unicodeScalars.filter {
+            $0 == " " || $0 == "\n" || !($0.properties.generalCategory == .control)
+        })
+        let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed.count > 512 ? String(trimmed.prefix(512)) + "…" : trimmed
     }
 
     /// Translates any thrown error into an `LLMError`. Already-typed `LLMError`s

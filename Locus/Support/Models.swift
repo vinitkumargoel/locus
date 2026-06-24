@@ -38,6 +38,8 @@ struct Meeting: Identifiable {
     let hasSummary: Bool
     /// Hidden searchable keywords (mirrors the prototype's `body`).
     let body: String
+    /// Lifecycle state from the store; surfaced as a badge in the library.
+    var status: MeetingStatus = .ready
 
     var sub: String { "\(app.rawValue) · \(date) · \(people) people" }
     var detailMeta: String { "\(app.rawValue) · \(date) · \(duration) · \(people) participants" }
@@ -95,6 +97,46 @@ struct STTModel: Identifiable {
     let detail: String
     let status: ModelStatus
     let progress: Double    // 0...1, used when downloading
+}
+
+/// One of the six snap anchors for the floating recording bar. Drag is
+/// free-placement; these are the Settings quick-jump presets. `normX`/`normY` are
+/// the bar's normalized top-left position (0 = left/top, 1 = right/bottom),
+/// matching `FloatingHUDController`'s placement math.
+enum HUDAnchor: String, CaseIterable, Identifiable {
+    case topLeft, topCenter, topRight, bottomLeft, bottomCenter, bottomRight
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .topLeft:      return "Top Left"
+        case .topCenter:    return "Top Center"
+        case .topRight:     return "Top Right"
+        case .bottomLeft:   return "Bottom Left"
+        case .bottomCenter: return "Bottom Center"
+        case .bottomRight:  return "Bottom Right"
+        }
+    }
+
+    var normX: Double {
+        switch self {
+        case .topLeft, .bottomLeft:     return 0
+        case .topCenter, .bottomCenter: return 0.5
+        case .topRight, .bottomRight:   return 1
+        }
+    }
+
+    var normY: Double {
+        switch self {
+        case .topLeft, .topCenter, .topRight: return 0
+        case .bottomLeft, .bottomCenter, .bottomRight: return 1
+        }
+    }
+
+    /// 3×2 grid placement for the Settings picker (row 0 = top, row 1 = bottom).
+    var gridRow: Int { normY == 0 ? 0 : 1 }
+    var gridCol: Int { normX == 0 ? 0 : (normX == 0.5 ? 1 : 2) }
 }
 
 struct PermissionItem: Identifiable {

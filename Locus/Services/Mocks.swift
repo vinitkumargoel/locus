@@ -227,6 +227,9 @@ final class MockSettingsStore: SettingsStore {
     var retentionDays = 30
     var disclaimerAccepted = true
     var darkAppearance = false
+    var hudEnabled = true
+    var hudPosX = 1.0
+    var hudPosY = 0.0
 }
 
 final class MockSecretStore: SecretStore {

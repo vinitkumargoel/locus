@@ -12,6 +12,17 @@ struct LibraryView: View {
             header
             Divider().overlay(theme.border)
 
+            if let err = app.storeError {
+                HStack(spacing: 8) {
+                    Text("⚠").font(.system(size: 13))
+                    Text(err).font(.system(size: 12))
+                    Spacer()
+                }
+                .foregroundStyle(theme.warnFg)
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .background(theme.warn)
+            }
+
             if app.noMatches {
                 noMatches
             } else if app.meetings.isEmpty {
@@ -97,6 +108,8 @@ struct LibraryView: View {
 
             Spacer(minLength: 8)
 
+            statusBadge(m.status)
+
             if m.hasSummary {
                 Text("Summary")
                     .font(.system(size: 11, weight: .semibold))
@@ -119,6 +132,31 @@ struct LibraryView: View {
         .contentShape(Rectangle())
         .hoverHighlight(cornerRadius: 0)
         .onTapGesture { app.openMeeting(m) }
+    }
+
+    /// Small status chip for non-clean recordings. `.ready`/`.recording` show
+    /// nothing; `.processing` gets a subtle neutral pill.
+    @ViewBuilder
+    private func statusBadge(_ status: MeetingStatus) -> some View {
+        switch status {
+        case .recovered:
+            pill("Interrupted", fg: theme.warnFg, bg: theme.warn)
+        case .failed:
+            pill("Failed", fg: theme.recSoft, bg: theme.rec)
+        case .processing:
+            pill("Processing", fg: theme.text2, bg: theme.card2)
+        case .ready, .recording:
+            EmptyView()
+        }
+    }
+
+    private func pill(_ text: String, fg: Color, bg: Color) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(fg)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(bg))
     }
 
     // MARK: Empty / no-match state

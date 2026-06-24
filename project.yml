@@ -38,11 +38,26 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: YES
-        CODE_SIGN_STYLE: Automatic
+        # Placeholder Apple Developer Team ID. Replace "YOUR_TEAM_ID" with the
+        # 10-character team identifier from developer.apple.com before signing
+        # a Release / notarized build. Debug keeps Automatic signing (below) so
+        # local + CI unsigned builds (CODE_SIGNING_ALLOWED=NO) are unaffected.
+        DEVELOPMENT_TEAM: YOUR_TEAM_ID
         CODE_SIGN_ENTITLEMENTS: Locus/Locus.entitlements
         INFOPLIST_KEY_LSUIElement: NO
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Locus records your microphone to transcribe meetings on-device."
         INFOPLIST_KEY_NSAudioCaptureUsageDescription: "Locus captures the other participants' audio from your meeting app to transcribe it on-device."
+      configs:
+        # Debug: keep Automatic signing. CI invokes xcodebuild with
+        # CODE_SIGNING_ALLOWED=NO, so Debug builds stay unsigned and green
+        # regardless of the DEVELOPMENT_TEAM placeholder above.
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        # Release: Manual Developer ID Application signing for notarized,
+        # non-App-Store distribution (see scripts/notarize.sh + RELEASE.md).
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Developer ID Application"
 
 schemes:
   Locus:

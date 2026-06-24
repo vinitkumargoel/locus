@@ -271,6 +271,11 @@ protocol SettingsStore: AnyObject {
     var retentionDays: Int { get set }
     var disclaimerAccepted: Bool { get set }
     var darkAppearance: Bool { get set }
+    /// Floating recording bar: whether it shows while recording, and its
+    /// normalized on-screen position (0…1 top-left within the placeable area).
+    var hudEnabled: Bool { get set }
+    var hudPosX: Double { get set }
+    var hudPosY: Double { get set }
 }
 
 protocol SecretStore: AnyObject {

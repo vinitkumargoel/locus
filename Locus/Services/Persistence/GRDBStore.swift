@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import OSLog
 
 // MARK: - GRDB-backed MeetingStore
 //
@@ -40,6 +41,8 @@ final class GRDBMeetingStore: MeetingStore {
     /// `diskUsageBytes()` to size the DB itself.
     private var databasePath: String?
 
+    private static let log = Logger(subsystem: "com.locus.app", category: "Store")
+
     /// Non-throwing: defers all heavy/throwing work to `bootstrap()`.
     init() {}
 
@@ -62,11 +65,21 @@ final class GRDBMeetingStore: MeetingStore {
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let dbURL = dir.appendingPathComponent("locus.sqlite")
 
+        // Privacy hardening (P1), consistent with the app's offline posture: lock
+        // the Locus support directory to 0700 and exclude it (and its audio +
+        // db contents) from backups. macOS NSFileProtection is iOS-centric, so
+        // restrictive POSIX perms + a backup-exclusion flag are the portable
+        // equivalent. Best-effort: a perms/flag failure must not abort bootstrap.
+        Self.harden(directory: dir)
+
         var config = Configuration()
         config.foreignKeysEnabled = true
 
         let queue = try DatabaseQueue(path: dbURL.path, configuration: config)
         try migrator().migrate(queue)
+
+        // Lock the SQLite file to 0600 now that the queue has created it.
+        Self.harden(file: dbURL)
 
         // Determine FTS availability from the actual schema rather than the
         // migration closure: on a second launch the migration has already run,
@@ -182,7 +195,9 @@ final class GRDBMeetingStore: MeetingStore {
             } catch {
                 // FTS5 not compiled into this SQLite build: skip the virtual
                 // table. `searchMeetings` falls back to LIKE (bootstrap detects
-                // the missing table via `tableExists`). Never fatal.
+                // the missing table via `tableExists`). Never fatal — but log it
+                // so a real schema error here isn't mistaken for "FTS absent".
+                Self.log.notice("FTS5 virtual table not created; search will use the LIKE fallback (\(error.localizedDescription, privacy: .public))")
             }
         }
 
@@ -375,17 +390,25 @@ final class GRDBMeetingStore: MeetingStore {
                          audioFarPath: String?, audioMicPath: String?) async throws {
         guard let queue = dbQueue else { return }
         try await queue.write { db in
+            // Derive the participant count from the distinct speakers actually
+            // present in the transcript — a single authority so the library/detail
+            // "N people" can never disagree with the transcript itself.
+            let people = try Int.fetchOne(db, sql: """
+                SELECT COUNT(DISTINCT speaker_key) FROM segment WHERE meeting_id = ?
+                """, arguments: [id]) ?? 0
             try db.execute(sql: """
                 UPDATE meeting SET
                     duration_s = :dur,
                     status = :status,
                     audio_path_far = :far,
                     audio_path_mic = :mic,
+                    people = :people,
                     ended_at = COALESCE(ended_at, started_at + :dur)
                 WHERE id = :id
                 """, arguments: [
                     "dur": durationSec, "status": status.rawValue,
-                    "far": audioFarPath, "mic": audioMicPath, "id": id,
+                    "far": audioFarPath, "mic": audioMicPath,
+                    "people": people, "id": id,
                 ])
         }
     }
@@ -427,6 +450,12 @@ final class GRDBMeetingStore: MeetingStore {
             let meetingId = try String.fetchOne(db, sql: "SELECT meeting_id FROM segment WHERE id = ?",
                                                  arguments: [id])
             try db.execute(sql: "UPDATE segment SET text = ? WHERE id = ?", arguments: [text, id])
+            if let mid = meetingId {
+                // Editing the transcript invalidates any generated summary, in the
+                // same transaction so the two can never drift apart.
+                try db.execute(sql: "UPDATE summary SET is_stale = 1 WHERE meeting_id = ?",
+                               arguments: [mid])
+            }
             if ftsAvailable, let mid = meetingId {
                 // Rebuild this meeting's segment FTS rows from the (now updated)
                 // segment table — simplest way to keep the index consistent
@@ -602,6 +631,35 @@ final class GRDBMeetingStore: MeetingStore {
         guard let attrs = try? fm.attributesOfItem(atPath: path),
               let size = attrs[.size] as? NSNumber else { return 0 }
         return size.int64Value
+    }
+
+    /// Best-effort directory hardening: `0700` perms + exclude-from-backup.
+    /// Applied unconditionally so an existing directory is also locked down.
+    /// Never throws — a perms/flag failure is logged, not propagated.
+    private static func harden(directory url: URL) {
+        let fm = FileManager.default
+        do {
+            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+        } catch {
+            log.notice("Could not set 0700 on \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+        var dir = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        do {
+            try dir.setResourceValues(values)
+        } catch {
+            log.notice("Could not exclude \(url.lastPathComponent, privacy: .public) from backup: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Best-effort `0600` on the SQLite file. Never throws.
+    private static func harden(file url: URL) {
+        do {
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        } catch {
+            log.notice("Could not set 0600 on \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Insert a single segment row (no FTS — caller decides).

@@ -46,11 +46,13 @@ struct SettingsView: View {
     @ViewBuilder private var section: some View {
         switch app.settingsSection {
         case .general:       GeneralSettingsView()
+        case .recordingBar:  RecordingBarSettingsView()
         case .transcription: TranscriptionSettingsView()
         case .ai:            AISettingsView()
         case .templates:     TemplatesSettingsView()
         case .storage:       StorageSettingsView()
         case .permissions:   PermissionsSettingsView()
+        case .diagnostics:   DiagnosticsSettingsView()
         }
     }
 }

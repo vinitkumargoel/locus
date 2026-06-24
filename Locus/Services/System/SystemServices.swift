@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import AppKit
 import Security
+import OSLog
 
 // MARK: - System services
 //
@@ -105,6 +106,9 @@ final class UserDefaultsSettingsStore: SettingsStore {
         static let retentionDays      = "locus.retentionDays"
         static let disclaimerAccepted = "locus.disclaimerAccepted"
         static let darkAppearance     = "locus.darkAppearance"
+        static let hudEnabled         = "locus.hudEnabled"
+        static let hudPosX            = "locus.hudPosX"
+        static let hudPosY            = "locus.hudPosY"
     }
 
     // Default values applied when the key has never been written. These mirror
@@ -118,6 +122,9 @@ final class UserDefaultsSettingsStore: SettingsStore {
         static let retentionDays      = 30
         static let disclaimerAccepted = false
         static let darkAppearance     = false
+        static let hudEnabled         = true
+        static let hudPosX            = 1.0   // right
+        static let hudPosY            = 0.0   // top  → defaults to top-right
     }
 
     var aiBaseURL: String {
@@ -164,6 +171,21 @@ final class UserDefaultsSettingsStore: SettingsStore {
         get { defaults.object(forKey: Key.darkAppearance) as? Bool ?? Default.darkAppearance }
         set { defaults.set(newValue, forKey: Key.darkAppearance) }
     }
+
+    var hudEnabled: Bool {
+        get { defaults.object(forKey: Key.hudEnabled) as? Bool ?? Default.hudEnabled }
+        set { defaults.set(newValue, forKey: Key.hudEnabled) }
+    }
+
+    var hudPosX: Double {
+        get { defaults.object(forKey: Key.hudPosX) as? Double ?? Default.hudPosX }
+        set { defaults.set(newValue, forKey: Key.hudPosX) }
+    }
+
+    var hudPosY: Double {
+        get { defaults.object(forKey: Key.hudPosY) as? Double ?? Default.hudPosY }
+        set { defaults.set(newValue, forKey: Key.hudPosY) }
+    }
 }
 
 // MARK: - Secrets
@@ -179,6 +201,14 @@ final class KeychainSecretStore: SecretStore {
 
     private let service: String
     private let account: String
+    private let log = Logger(subsystem: "com.locus.app", category: "Keychain")
+
+    /// Accessibility class for the stored key. `WhenUnlockedThisDeviceOnly` means
+    /// the key is readable only while the screen is unlocked (not merely after
+    /// first boot-unlock) and never syncs to iCloud or migrates to another Mac —
+    /// the right posture for a desktop app that only needs the key during active,
+    /// user-initiated summary generation.
+    private let accessibility = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 
     /// Service/account default to the app's fixed identifiers; injectable so
     /// tests can use an isolated item.
@@ -223,20 +253,25 @@ final class KeychainSecretStore: SecretStore {
         case errSecSuccess:
             return
         case errSecItemNotFound:
-            var addQuery = baseQuery
-            addQuery[kSecValueData as String] = data
-            // Keep the secret available only after first unlock and only on this
-            // device (never synced to iCloud / migrated to another Mac).
-            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            SecItemAdd(addQuery as CFDictionary, nil)
+            add(data)
         default:
             // Some other failure (e.g. the item exists but is inaccessible).
             // Best-effort recover: delete and re-add so the new value sticks.
             delete()
-            var addQuery = baseQuery
-            addQuery[kSecValueData as String] = data
-            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            SecItemAdd(addQuery as CFDictionary, nil)
+            add(data)
+        }
+    }
+
+    /// Add the key with our accessibility class, logging (never echoing the key)
+    /// if the Keychain rejects it — otherwise the user thinks the key saved while
+    /// `apiKey()` will return nil on the next launch.
+    private func add(_ data: Data) {
+        var addQuery = baseQuery
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = accessibility
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        if status != errSecSuccess {
+            log.error("Keychain add failed (OSStatus \(status, privacy: .public)); API key was not saved")
         }
     }
 

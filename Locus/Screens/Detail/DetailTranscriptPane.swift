@@ -21,9 +21,13 @@ struct DetailTranscriptPane: View {
 
     private var topBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(app.selectedMeeting.title)
-                .font(.system(size: 19, weight: .bold))
-                .foregroundStyle(theme.text)
+            TextField("", text: Binding(
+                get: { app.selectedMeeting.title },
+                set: { app.renameMeeting(to: $0) }
+            ))
+            .textFieldStyle(.plain)
+            .font(.system(size: 19, weight: .bold))
+            .foregroundStyle(theme.text)
 
             Text(app.selectedMeeting.detailMeta)
                 .font(.system(size: 12.5))
@@ -31,11 +35,21 @@ struct DetailTranscriptPane: View {
                 .padding(.top, 5)
 
             HStack(spacing: 8) {
-                ForEach(app.speakerKeys, id: \.self) { key in
+                ForEach(app.detailSpeakerKeys, id: \.self) { key in
                     speakerChip(key)
                 }
             }
             .padding(.top, 14)
+
+            if let warn = app.finalizeWarning {
+                Text("⚠ " + warn)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(theme.warnFg)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(theme.warn))
+                    .padding(.top, 12)
+            }
         }
         .padding(.top, 18)
         .padding(.horizontal, 22)
